@@ -1,4 +1,4 @@
-import json
+import os
 import bybit
 from decimal import *
 import threading
@@ -111,7 +111,41 @@ def create_asks(client):  # thread for accessing globals asks, loops to place se
             orders = place(client, price, amount, orders, "Sell")
 
 
+def sub_menu():
+    os.system('cls')
+    print("At any time")
+    print("Press 1 to begin program")
+    print("Press 2 to stop program")
+    print("Press 0 to quit")
+    # ans = input("- - - - - - - -\n")
+
+
+def main_menu():
+    print("- - - - - - - -")
+    print("Please ensure you have configured your API keys as")
+    print("described on https://github.com/mevasi/ByBitBot")
+    print("- - - -")
+    print("If you have done this, press 1, otherwise press 0 to enter manually")
+    print("Please make a selection and press Enter")
+    ans = input("- - - - - - - -\n")
+
+    if ans == "0":
+        os.system('cls')
+        print("TBD read API keys")
+        time.sleep(2)
+        sub_menu()
+    elif ans == "1":
+        sub_menu()
+
+
 if __name__ == '__main__':
+    # initialise main menu
+    # os.system('cls')
+    # menu = threading.Thread(target=main_menu)
+    # menu.start()
+
+    # time.sleep(10)
+
     # initialise client with keys
     by_client = bybit.bybit(test=True, api_key=api_key, api_secret=api_secret)
 
