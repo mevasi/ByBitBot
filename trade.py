@@ -11,7 +11,7 @@ bids = []
 asks = []
 
 
-def update_order_book(client):
+def update_order_book(client):  # runs as a thread to keep global bid and ask arrays updated
     global bids
     global asks
     while 1:
@@ -28,7 +28,57 @@ def update_order_book(client):
         asks = [x for x in btc if x['side'] == 'Sell']
 
 
-def create_bids(client):
+def check_position_balance(client, cmmnd):  # ensure difference between position sides is a small as possible
+    # check my current open positions
+    positions = client.LinearPositions.LinearPositions_myPosition(symbol="BTCUSDT").result()[0]['result']
+    # split into buy and sell
+    buy_position = positions[0]['size']
+    sell_position = positions[1]['size']
+
+    # find the difference between open positions and return appropriate order to rectify
+    if cmmnd == "Buy":
+        if sell_position > buy_position:
+            return round(sell_position - buy_position, 3)
+        elif sell_position < buy_position:
+            return 0
+
+    if cmmnd == "Sell":
+        if buy_position > sell_position:
+            return round(buy_position - sell_position, 3)
+        elif buy_position < sell_position:
+            return 0
+
+    return 0.01  # default order size if positions are equal
+
+
+def place(clnt, prc, quantity, ordr, command):  # manage buy or sell orders depending on which thread calls
+    # attempt to cancel all the orders
+    # on this side, as the price has changed
+    try:
+        for order in ordr:
+            print(clnt.LinearOrder.LinearOrder_cancel(symbol="BTCUSDT", order_id=order).result())
+        ordr = []
+    except:
+        print("no open orders or cannot cancel")
+
+    # try to place an order at the bid/ask, and a buy/sell to close order at the same price
+    try:
+        ord_1 = clnt.LinearOrder.LinearOrder_new(side=command, symbol="BTCUSDT", order_type="Limit", qty=quantity,
+                                                 price=prc, time_in_force="PostOnly",
+                                                 reduce_only=False).result()[0]['result']['order_id']
+        print(ord_1)
+        ordr.append(ord_1)  # append new order to orders array
+        # ord_2 = clnt.LinearOrder.LinearOrder_new(side=command, symbol="BTCUSDT", order_type="Limit", qty=0.01,
+        #                                         price=prc, time_in_force="PostOnly",
+        #                                         reduce_only=True).result()[0]['result']['order_id']
+        # print(ord_2)
+        # ordr.append(ord_2)  # append new order to orders array
+    except:
+        print("could not place one or both ", command, " side orders")
+    return ordr
+
+
+def create_bids(client):  # thread for accessing globals bids, loops to place buy orders
     # initial blank variables
     price = 0
     orders = []
@@ -39,29 +89,13 @@ def create_bids(client):
         if price == Decimal(bids[0]['price']):
             pass
         else:
-            try:
-                for order in orders:
-                    print(client.LinearOrder.LinearOrder_cancel(symbol="BTCUSDT", order_id=order).result())
-                orders = []
-            except:
-                print("no open orders or cannot cancel")
-
             price = Decimal(bids[0]['price'])
-
-            try:
-                ord_1 = client.LinearOrder.LinearOrder_new(side="Buy", symbol="BTCUSDT", order_type="Limit", qty=0.01,
-                                                           price=price, time_in_force="PostOnly",
-                                                           reduce_only=False).result()[0]['result']['order_id']
-                print(ord_1)
-                ord_2 = client.LinearOrder.LinearOrder_new(side="Buy", symbol="BTCUSDT", order_type="Limit", qty=0.01,
-                                                           price=price, time_in_force="PostOnly",
-                                                           reduce_only=True).result()[0]['result']['order_id']
-                print(ord_2)
-            except:
-                print("could not place one or both buy/close with buy orders")
+            amount = check_position_balance(client, "Buy")
+            if amount != 0:
+                orders = place(client, price, amount, orders, "Buy")
 
 
-def create_asks(client):
+def create_asks(client):  # thread for accessing globals asks, loops to place sell orders
     # initial blank variables
     price = 0
     orders = []
@@ -72,28 +106,9 @@ def create_asks(client):
         if price == Decimal(asks[0]['price']):
             pass
         else:
-            try:
-                for order in orders:
-                    print(client.LinearOrder.LinearOrder_cancel(symbol="BTCUSDT", order_id=order).result())
-                orders = []
-            except:
-                print("no open orders or cannot cancel")
-
             price = Decimal(asks[0]['price'])
-
-            try:
-                ord_1 = client.LinearOrder.LinearOrder_new(side="Sell", symbol="BTCUSDT", order_type="Limit", qty=0.01,
-                                                           price=price, time_in_force="PostOnly",
-                                                           reduce_only=False).result()[0]['result']['order_id']
-                print(ord_1)
-                orders.append(ord_1)
-                ord_2 = client.LinearOrder.LinearOrder_new(side="Sell", symbol="BTCUSDT", order_type="Limit", qty=0.01,
-                                                           price=price, time_in_force="PostOnly",
-                                                           reduce_only=True).result()[0]['result']['order_id']
-                print(ord_2)
-                orders.append(ord_2)
-            except:
-                print("could not place one or both sell/close with sell orders")
+            amount = check_position_balance(client, "Sell")
+            orders = place(client, price, amount, orders, "Sell")
 
 
 if __name__ == '__main__':
